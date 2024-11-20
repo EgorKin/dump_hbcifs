@@ -553,6 +553,7 @@ void Dump_HBCIFS::process_image(const char *file, FILE *fp, bool called_direct)
     dpos = ipos + ihdr.dir_offset;
 
     if(flags & FLAG_DISPLAY) {
+		printf("   Offset     Size  Name\n");
         display_ihdr(fp, ipos, &ihdr);
         if(check("Image-directory") == 0) {
             printf(" %8x %8x  %s\n", dpos, ihdr.hdr_dir_size - ihdr.dir_offset, "Image-directory");
@@ -590,7 +591,7 @@ void Dump_HBCIFS::process_image(const char *file, FILE *fp, bool called_direct)
             }
         }
         dpos += dir->attr.size;
-
+		
         switch(dir->attr.mode & S_IFMT) {
         case S_IFREG:
             if(CROSSENDIAN(ihdr.flags & IMAGE_FLAGS_BIGENDIAN)) {
@@ -810,8 +811,60 @@ void Dump_HBCIFS::process_hbcifs(const char *file, FILE *fp)
         }
         break;
         default:
-            error(1, (char *)("Unsupported compression type."));
-            return;
+			if((hbchdr.compression01&0xFF) == 0x88)
+	        {
+				//process_ifs(file, fp, 1);
+				
+				// Copy non-compressed part.
+				
+				//rewind(fp);
+				//if(CROSSENDIAN(shdr.flags1 & STARTUP_HDR_FLAGS1_BIGENDIAN))
+				//	for(n = 0 ; n < spos + ENDIAN_RET32(shdr.startup_size); ++n) {
+				//		putc(getc(fp), fp2);
+				//	}
+				//else
+				//	for(n = 0 ; n < spos + shdr.startup_size; ++n) {
+				//		putc(getc(fp), fp2);
+				//	}
+				//fflush(fp2);
+
+				// Uncompress compressed part - copied from IFS LZO
+				{
+					unsigned	len, til=0, tol=0;
+					lzo_uint	out_len;
+					int			status;
+
+					if(lzo_init() != LZO_E_OK) {
+						error(1,(char *)("decompression init failure"));
+						return;
+					}
+					printf("LZO Decompress @0x%0lx\n", ftell(fp));
+					for(;;) {
+						unsigned int nowPtr=ftell(fp);
+						len = getc(fp) << 8;
+						len += getc(fp);
+
+						if(len == 0) break;
+						fread(buf, len, 1, fp);
+						status = lzo1x_decompress(buf, len, out_buf, &out_len, NULL);
+						if(status != LZO_E_OK) {
+							error(1, (char *)("decompression failure"));
+							printf("decompression not success with code %d. out_len=%lu.\n", status, out_len);
+							return;
+						}
+						til+=len;tol+=out_len;
+						printf("0x88 type LZO Decompress rd=%d, wr=%lu @ 0x%x\n", len, out_len, nowPtr);
+						fwrite(out_buf, out_len, 1, fp2);
+					}
+					printf("Decompressed %d bytes-> %d bytes\n", til, tol);
+				}
+			}
+			else
+			{
+				error(1, (char *)("Unsupported compression type."));
+				printf("type = %x", (hbchdr.compression01&0xFF));
+				return;
+			}
         }
 
         fp = fp2;
@@ -961,6 +1014,23 @@ void Dump_HBCIFS::display_symlink(FILE *fp, int ipos, struct image_dirent::image
 
 void Dump_HBCIFS::process_symlink(FILE *fp, int ipos, struct image_dirent::image_symlink *ent)
 {
+	if(flags & FLAG_EXTRACT) {
+		//ln -sf /path/to/file /path/to/symlink
+		char    cmd[PATH_MAX] = "";
+		strcat(cmd, "ln -sf ");
+		strcat(cmd, &ent->path[ent->sym_offset]);
+		strcat(cmd, " ");
+		strcat(cmd, ent->path);
+		system(cmd);
+		
+		if(check(ent->path) != 0) {
+			return;
+		}
+		printf("%s -> %s ... size %i \n", ent->path, &ent->path[ent->sym_offset], ent->sym_size);
+		if(verbose) {
+			display_attr(&ent->attr);
+		}
+    }
     if(flags & FLAG_DISPLAY) {
         display_symlink(fp, ipos, ent);
     }
@@ -1057,8 +1127,18 @@ void Dump_HBCIFS::extract_file(FILE *fp, int ipos, struct image_dirent::image_fi
         return;
     }
 
+	// check if name is end at / - it was at case     "10ea8        0  etc/dbus-1/session.d/"
+	// remove / character at end of filename
+	//if(!strcmp(&name[strlen(name) - 1], "/") && ent->size == 0)
+	//{
+	//	printf("HERE");
+	//	strncpy(name, "\0", strlen(name) - 1);
+	//}
+	
     if(!(dst = fopen(name, "wb"))) {
-        error(0, (char *)("Unable to open %s: %s\n"), name, strerror(errno));
+        //error(0, (char *)("Unable to open %s: %s\n"), name, strerror(errno));
+		printf("WARNING: Unable to save file %s (size: %i): %s\n", name, ent->size, strerror(errno));
+		return;
     }
 
     fseek(fp, ipos + ent->offset, SEEK_SET);
