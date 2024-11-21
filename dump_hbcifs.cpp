@@ -996,6 +996,22 @@ void Dump_HBCIFS::display_dir(FILE *fp, int ipos, struct image_dirent::image_dir
 
 void Dump_HBCIFS::process_dir(FILE *fp, int ipos, struct image_dirent::image_dir *ent)
 {
+	// add creating dirs while extracting files - need to create empty dirs (early dirs was created while file extracting only)
+	if(flags & FLAG_EXTRACT) {
+		char dirnames[PATH_MAX] = "/";   //POSIX dirnames truncates the string
+
+		strcpy(dirnames, ent->path);
+		if(strlen(dirnames) == 0)
+			return;
+		if(mkdir_p(ent->path)) {
+			printf("unable to mkdir -p for %s\n", ent->path);
+			return;
+		}
+		else
+		{
+			printf("%s\r\n", ent->path);
+		}
+	}
     if(flags & FLAG_DISPLAY) {
         display_dir(fp, ipos, ent);
     }
@@ -1015,9 +1031,24 @@ void Dump_HBCIFS::display_symlink(FILE *fp, int ipos, struct image_dirent::image
 void Dump_HBCIFS::process_symlink(FILE *fp, int ipos, struct image_dirent::image_symlink *ent)
 {
 	if(flags & FLAG_EXTRACT) {
+		// create dir for symlink, ln cmd can't do it
+		char   dirnames[PATH_MAX] = "/";   //POSIX dirnames truncates the string
+
+		strcpy(dirnames, ent->path);
+		if(mkdir_p(dirname(dirnames))) {
+			printf("unable to mkdir -p for symlink %s\n", ent->path);
+			//return;
+		}
+	
 		//ln -sf /path/to/file /path/to/symlink
-		char    cmd[PATH_MAX] = "";
+		// TODO: fix local path/to/file to proper local relative path
+		char   cmd[PATH_MAX] = "";
+		
 		strcat(cmd, "ln -sf ");
+		if(strncmp(&ent->path[ent->sym_offset], "/", 1) != 0)
+			strcat(cmd, "./"); // add "./" to path like "bin/sh" to do "ln" cmd to local dir file (not global /bin)
+		else
+			strcat(cmd, "."); // add "." to path like "/bin/sh" to do "ln" cmd to local dir file (not global /bin)
 		strcat(cmd, &ent->path[ent->sym_offset]);
 		strcat(cmd, " ");
 		strcat(cmd, ent->path);
@@ -1127,13 +1158,28 @@ void Dump_HBCIFS::extract_file(FILE *fp, int ipos, struct image_dirent::image_fi
         return;
     }
 
-	// check if name is end at / - it was at case     "10ea8        0  etc/dbus-1/session.d/"
-	// remove / character at end of filename
-	//if(!strcmp(&name[strlen(name) - 1], "/") && ent->size == 0)
-	//{
-	//	printf("HERE");
-	//	strncpy(name, "\0", strlen(name) - 1);
-	//}
+	// check if filename end with '/' and filesize is zero - it was in case parsing   "etc/dbus-1/session.d/"
+	// then create dir, not file
+	if(!strcmp(&name[strlen(name) - 1], "/") && ent->size == 0)
+	{
+		// add creating dirs while extracting files - need to create empty dirs (early dirs was created while file extracting only)
+		if(flags & FLAG_EXTRACT) {
+			char dirnames[PATH_MAX] = "/";   //POSIX dirnames truncates the string
+
+			strcpy(dirnames, ent->path);
+			if(strlen(dirnames) == 0)
+				return;
+			if(mkdir_p(ent->path)) {
+				printf("unable to mkdir -p for %s\n", ent->path);
+				return;
+			}
+			else
+			{
+				printf("%s\r\n", ent->path);
+			}
+		}
+		return;
+	}
 	
     if(!(dst = fopen(name, "wb"))) {
         //error(0, (char *)("Unable to open %s: %s\n"), name, strerror(errno));
