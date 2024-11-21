@@ -1041,15 +1041,34 @@ void Dump_HBCIFS::process_symlink(FILE *fp, int ipos, struct image_dirent::image
 		}
 	
 		//ln -sf /path/to/file /path/to/symlink
-		// TODO: fix local path/to/file to proper local relative path
+		// CHECKIT: fix local path/to/file to proper local relative path
 		char   cmd[PATH_MAX] = "";
+		char   path_to_file[PATH_MAX] = "";
+		char   path_to_symlink[PATH_MAX] = "";
+		char   t1[PATH_MAX] = "";
+		char   t2[PATH_MAX] = "";
+		strcpy(path_to_symlink, ent->path);
+		strcpy(path_to_file, &ent->path[ent->sym_offset]);
 		
 		strcat(cmd, "ln -sf ");
+		
+		// new code
+		if(strncmp(path_to_file, "/", 1) == 0)
+			sprintf(path_to_symlink, "/%s", ent->path);
+		strcpy(t1, dirname(path_to_file));
+		strcpy(t2, dirname(path_to_symlink));
+		if(strcmp(t1, t2) == 0)
+			strcat(cmd, &ent->path[ent->sym_offset + strlen(t1) + 1]);
+		else
+			strcat(cmd, &ent->path[ent->sym_offset]);
+		// end of new code
+		/* old code
 		if(strncmp(&ent->path[ent->sym_offset], "/", 1) != 0)
 			strcat(cmd, "./"); // add "./" to path like "bin/sh" to do "ln" cmd to local dir file (not global /bin)
 		else
 			strcat(cmd, "."); // add "." to path like "/bin/sh" to do "ln" cmd to local dir file (not global /bin)
 		strcat(cmd, &ent->path[ent->sym_offset]);
+		*/
 		strcat(cmd, " ");
 		strcat(cmd, ent->path);
 		system(cmd);
@@ -1182,7 +1201,7 @@ void Dump_HBCIFS::extract_file(FILE *fp, int ipos, struct image_dirent::image_fi
 	}
 	
     if(!(dst = fopen(name, "wb"))) {
-        //error(0, (char *)("Unable to open %s: %s\n"), name, strerror(errno));
+        //error(0, (char *)("Unable to open %s: %s\n"), name, strerror(errno)); // error() halt execution, printf() allows skip incorrect file
 		printf("WARNING: Unable to save file %s (size: %i): %s\n", name, ent->size, strerror(errno));
 		return;
     }
