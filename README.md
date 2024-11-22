@@ -8,7 +8,9 @@ This process is helpful for multi-section firmware files used in QNX vehicle fir
 
 ## Dependencies
 
-CMake links against LZO, UCL and OpenSSL (for MD5). If you install this on a typical user workstation, you will need the "-devel" package.
+CMake links against LZO, UCL and OpenSSL (for MD5). If you install this on a typical user workstation, you will need the "-devel" packages:
+
+```apt install libssl-dev liblzo2-dev libucl-dev```
 
 ## dump_hbcifs help script
 ```
