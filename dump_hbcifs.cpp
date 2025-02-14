@@ -1037,38 +1037,14 @@ void Dump_HBCIFS::process_symlink(FILE *fp, int ipos, struct image_dirent::image
 		strcpy(dirnames, ent->path);
 		if(mkdir_p(dirname(dirnames))) {
 			printf("unable to mkdir -p for symlink %s\n", ent->path);
-			//return;
+			//return; //comment for continue extracting other files
 		}
 	
 		//ln -sf /path/to/file /path/to/symlink
-		// CHECKIT: fix local path/to/file to proper local relative path
 		char   cmd[PATH_MAX] = "";
-		char   path_to_file[PATH_MAX] = "";
-		char   path_to_symlink[PATH_MAX] = "";
-		char   t1[PATH_MAX] = "";
-		char   t2[PATH_MAX] = "";
-		strcpy(path_to_symlink, ent->path);
-		strcpy(path_to_file, &ent->path[ent->sym_offset]);
 		
 		strcat(cmd, "ln -sf ");
-		
-		// new code
-		if(strncmp(path_to_file, "/", 1) == 0)
-			sprintf(path_to_symlink, "/%s", ent->path);
-		strcpy(t1, dirname(path_to_file));
-		strcpy(t2, dirname(path_to_symlink));
-		if(strcmp(t1, t2) == 0)
-			strcat(cmd, &ent->path[ent->sym_offset + strlen(t1) + 1]);
-		else
-			strcat(cmd, &ent->path[ent->sym_offset]);
-		// end of new code
-		/* old code
-		if(strncmp(&ent->path[ent->sym_offset], "/", 1) != 0)
-			strcat(cmd, "./"); // add "./" to path like "bin/sh" to do "ln" cmd to local dir file (not global /bin)
-		else
-			strcat(cmd, "."); // add "." to path like "/bin/sh" to do "ln" cmd to local dir file (not global /bin)
 		strcat(cmd, &ent->path[ent->sym_offset]);
-		*/
 		strcat(cmd, " ");
 		strcat(cmd, ent->path);
 		system(cmd);
